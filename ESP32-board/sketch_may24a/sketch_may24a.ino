@@ -11,6 +11,16 @@ extern "C" {
 
 #include "esp_flash.h"
 
+
+// board 
+#include <driver/i2s.h>
+
+
+#define I2S_WS      21  // Word Select
+#define I2S_SCK     20  // Serial Clock
+#define I2S_SD      47  // Data from INMP441
+bool listening = true;
+
 // hotspot
 // const char* ssid = "Letdon的iPhone";
 // const char* password = "doubibax";
@@ -56,74 +66,102 @@ void listFiles(fs::FS &fs, const char * dirname, uint8_t levels) {
 void setup() {
   Serial.begin(115200);
   delay(1000); //avoid to be too fast to generate the message and cause baud rate is wrong,
-    if (!LittleFS.begin(true)) {
-    Serial.println("Failed to mount LittleFS");
-    return;
-  }
+  Serial.println("Starting INMP441 with I2S...");
 
 
-  Serial.printf("Total space: %d bytes\n", LittleFS.totalBytes());
-Serial.printf("Used space:  %d bytes\n", LittleFS.usedBytes());
+  i2s_config_t i2s_config = {
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+    .sample_rate = 16000,  // Can also try 44100
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+    .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,  // INMP441 is mono
+    .communication_format = I2S_COMM_FORMAT_I2S,
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 8,
+    .dma_buf_len = 1024,
+    .use_apll = false,
+    .tx_desc_auto_clear = false,
+    .fixed_mclk = 0
+  };
 
+  // 2. Define pin mapping
+  i2s_pin_config_t pin_config = {
+    .bck_io_num = I2S_SCK,
+    .ws_io_num = I2S_WS,
+    .data_out_num = I2S_PIN_NO_CHANGE,  // We only receive
+    .data_in_num = I2S_SD
+  };
 
-  WiFi.disconnect(true);  // clear previous
-  WiFi.mode(WIFI_STA);
-  esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)username, strlen(username));
-  esp_wifi_sta_wpa2_ent_set_username((uint8_t *)username, strlen(username));
-  esp_wifi_sta_wpa2_ent_set_password((uint8_t *)password, strlen(password));
-  esp_wifi_sta_wpa2_ent_enable();
-
-  WiFi.begin(ssid);
-  Serial.println("Connecting to eduroam...");
-
-  int tries = 0;
-  while (WiFi.status() != WL_CONNECTED && tries < 20) {
-    delay(1000);
-    Serial.print(".");
-    tries++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected!");
-    Serial.println("IP Address: " + WiFi.localIP().toString());
-  } else {
-    Serial.println("\nFailed to connect.");
-  }
-
-
-  // remote connect to download
-  HTTPClient http;
-  http.begin(mp3URL);
-  int httpCode = http.GET();
-
-  if (httpCode == 200) {
-    File file = LittleFS.open(savePath, FILE_WRITE);
-    if (!file) {
-      Serial.println("Failed to open file for writing");
-      return;
-    }
-
-    WiFiClient* stream = http.getStreamPtr();
-    uint8_t buffer[128];
-    int len = http.getSize();
-
-    while (http.connected() && len > 0) {
-      int bytesRead = stream->readBytes(buffer, sizeof(buffer));
-      file.write(buffer, bytesRead);
-      len -= bytesRead;
-    }
-
-    file.close();
-    Serial.println("Download complete and saved to LittleFS!");
-  } else {
-    Serial.printf("HTTP GET failed, code: %d\n", httpCode);
-  }
-
-  http.end();
+  // 3. Install and start I2S
+  i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+  i2s_set_pin(I2S_NUM_0, &pin_config);
 
 
 
-listFiles(LittleFS, "/", 2);
+  //   if (!LittleFS.begin(true)) {
+  //   Serial.println("Failed to mount LittleFS");
+  //   return;
+  // }
+
+
+
+//   WiFi.disconnect(true);  // clear previous
+//   WiFi.mode(WIFI_STA);
+//   esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)username, strlen(username));
+//   esp_wifi_sta_wpa2_ent_set_username((uint8_t *)username, strlen(username));
+//   esp_wifi_sta_wpa2_ent_set_password((uint8_t *)password, strlen(password));
+//   esp_wifi_sta_wpa2_ent_enable();
+
+//   WiFi.begin(ssid);
+//   Serial.println("Connecting to eduroam...");
+
+//   int tries = 0;
+//   while (WiFi.status() != WL_CONNECTED && tries < 20) {
+//     delay(1000);
+//     Serial.print(".");
+//     tries++;
+//   }
+
+//   if (WiFi.status() == WL_CONNECTED) {
+//     Serial.println("\nConnected!");
+//     Serial.println("IP Address: " + WiFi.localIP().toString());
+//   } else {
+//     Serial.println("\nFailed to connect.");
+//   }
+
+
+//   // remote connect to download
+//   HTTPClient http;
+//   http.begin(mp3URL);
+//   int httpCode = http.GET();
+
+//   if (httpCode == 200) {
+//     File file = LittleFS.open(savePath, FILE_WRITE);
+//     if (!file) {
+//       Serial.println("Failed to open file for writing");
+//       return;
+//     }
+
+//     WiFiClient* stream = http.getStreamPtr();
+//     uint8_t buffer[128];
+//     int len = http.getSize();
+
+//     while (http.connected() && len > 0) {
+//       int bytesRead = stream->readBytes(buffer, sizeof(buffer));
+//       file.write(buffer, bytesRead);
+//       len -= bytesRead;
+//     }
+
+//     file.close();
+//     Serial.println("Download complete and saved to LittleFS!");
+//   } else {
+//     Serial.printf("HTTP GET failed, code: %d\n", httpCode);
+//   }
+
+//   http.end();
+
+
+
+// listFiles(LittleFS, "/", 2);
 
 
   // if (!LittleFS.begin(true)) {
@@ -199,4 +237,34 @@ void loop() {
   // }
   // file.close();
   // delay(5000);
+
+
+  if (Serial.available()) {
+    char c = Serial.read();
+    if (c == 'q') {
+      listening = false;
+      Serial.println("Stopped listening to mic.");
+    }
+    if (c == 'r') {
+      listening = true;
+      Serial.println("Resumed mic.");
+    }
+  }
+
+  if (!listening) {
+    delay(100);
+    return;
+  }
+
+  // Read mic data
+  uint8_t buffer[1024];
+  size_t bytesRead;
+  i2s_read(I2S_NUM_0, &buffer, sizeof(buffer), &bytesRead, portMAX_DELAY);
+
+  for (int i = 0; i < 20 && i < bytesRead; i += 2) {
+    int16_t sample = buffer[i] | (buffer[i + 1] << 8);
+    Serial.println(sample);
+  }
+
+  delay(100);
 }
