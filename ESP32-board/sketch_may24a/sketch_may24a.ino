@@ -16,21 +16,28 @@ extern "C" {
 #include <driver/i2s.h>
 
 
-#define I2S_WS      21  // Word Select
-#define I2S_SCK     20  // Serial Clock
-#define I2S_SD      47  // Data from INMP441
+#define I2S_WS      5  // Word Select
+#define I2S_SCK     4  // Serial Clock
+#define I2S_SD      41  // Data from INMP441
 bool listening = true;
+int16_t previousSample = 0; 
+
+bool recording = false;
+File recordingFile;
+const char* recordFilePath = "/record.raw";
 
 // hotspot
-// const char* ssid = "Letdon的iPhone";
-// const char* password = "doubibax";
-
+const char* ssid = "Letdon的iPhone";
+const char* password = "";
+// hotspot 
 // const char* serverName = "http://172.20.10.2:3000/esp32";  //MacBook's IP (will change with wifi)
 
 //school wifi
-const char* ssid = "eduroam";
-const char* username = ""; // full login
-const char* password = "";
+// const char* ssid = "eduroam";
+
+// const char* username = "; // full login
+// const char* password = "!";
+
 
 
 const char* mp3URL = "https://firebasestorage.googleapis.com/v0/b/portfolio-73553.appspot.com/o/hello-46355.mp3?alt=media&token=76ac75dc-3a16-4cf5-941b-44fa12b6e49f";
@@ -63,10 +70,45 @@ void listFiles(fs::FS &fs, const char * dirname, uint8_t levels) {
   }
 }
 
+void uploadFile() {
+  File file = LittleFS.open(recordFilePath, "r");
+  if (!file) {
+    Serial.println("Failed to open file for reading.");
+    return;
+  }
+
+  HTTPClient http;
+  http.begin("http://172.20.10.2:3000/upload-raw");   // 修改为你的服务器地址
+  http.addHeader("Content-Type", "application/octet-stream");
+
+  // 发送 POST 请求
+  int code = http.sendRequest("POST", &file, file.size());
+  http.end();   // 释放 HTTP 资源
+  file.close(); // 关闭文件句柄
+
+  // 根据返回码打印结果
+  if (code == 200) {
+    Serial.println("Upload succeeded.");
+  } else {
+    Serial.printf("Upload failed. HTTP code: %d\n", code);
+  }
+
+  // 无论成功或失败都删除本地文件
+  if (LittleFS.remove(recordFilePath)) {
+    Serial.println("Local file deleted.");
+  } else {
+    Serial.println("Failed to delete local file.");
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000); //avoid to be too fast to generate the message and cause baud rate is wrong,
   Serial.println("Starting INMP441 with I2S...");
+  if (!LittleFS.begin(true)) {
+  Serial.println("Mount LittleFS failed!");
+  return;
+}
 
 
   i2s_config_t i2s_config = {
@@ -104,29 +146,34 @@ void setup() {
 
 
 
-//   WiFi.disconnect(true);  // clear previous
-//   WiFi.mode(WIFI_STA);
-//   esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)username, strlen(username));
-//   esp_wifi_sta_wpa2_ent_set_username((uint8_t *)username, strlen(username));
-//   esp_wifi_sta_wpa2_ent_set_password((uint8_t *)password, strlen(password));
-//   esp_wifi_sta_wpa2_ent_enable();
+  WiFi.disconnect(true);  // clear previous
+  WiFi.mode(WIFI_STA);
+  // esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)username, strlen(username));
+  // esp_wifi_sta_wpa2_ent_set_username((uint8_t *)username, strlen(username));
+  // esp_wifi_sta_wpa2_ent_set_password((uint8_t *)password, strlen(password));
+  // esp_wifi_sta_wpa2_ent_enable();
+  
 
-//   WiFi.begin(ssid);
-//   Serial.println("Connecting to eduroam...");
+  // WiFi.begin(ssid);
+  // Serial.println("Connecting to eduroam...");
 
-//   int tries = 0;
-//   while (WiFi.status() != WL_CONNECTED && tries < 20) {
-//     delay(1000);
-//     Serial.print(".");
-//     tries++;
-//   }
+  WiFi.begin(ssid, password); 
+  Serial.println("Connecting to hotspot...");
 
-//   if (WiFi.status() == WL_CONNECTED) {
-//     Serial.println("\nConnected!");
-//     Serial.println("IP Address: " + WiFi.localIP().toString());
-//   } else {
-//     Serial.println("\nFailed to connect.");
-//   }
+
+  int tries = 0;
+  while (WiFi.status() != WL_CONNECTED && tries < 20) {
+    delay(1000);
+    Serial.print(".");
+    tries++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected!");
+    Serial.println("IP Address: " + WiFi.localIP().toString());
+  } else {
+    Serial.println("\nFailed to connect.");
+  }
 
 
 //   // remote connect to download
@@ -200,71 +247,71 @@ void setup() {
 }
 
 void loop() {
-  // if (WiFi.status() == WL_CONNECTED) {
-  //   HTTPClient http;
-  //   http.begin(serverName);
-  //   http.addHeader("Content-Type", "application/json");
+static size_t totalBytes = 0;  // 记录录音总大小（可选限制）
+  const size_t maxFileSize = 100000; // 最大录音大小：100KB（可自定义）
 
-  //   StaticJsonDocument<200> jsonDoc;
-  //   jsonDoc["message"] = "Hi";
-
-  //   String requestBody;
-  //   serializeJson(jsonDoc, requestBody);
-
-  //   int httpResponseCode = http.POST(requestBody);
-
-  //   if (httpResponseCode > 0) {
-  //     String response = http.getString();
-  //     Serial.print("Response: ");
-  //     Serial.println(response);
-  //   } else {
-  //     Serial.print("Error code: ");
-  //     Serial.println(httpResponseCode);
-  //   }
-
-  //   http.end();
-  // }
-
-  // File file = LittleFS.open("/test.txt", "r");
-  // if (!file) {
-  //   Serial.println("Failed to open file for reading");
-  //   return;
-  // }
-
-  // Serial.println("File content:");
-  // while (file.available()) {
-  //   Serial.write(file.read());
-  // }
-  // file.close();
-  // delay(5000);
-
-
+  // 接收串口命令：s 开始录音，q 停止并上传
   if (Serial.available()) {
     char c = Serial.read();
+
+    if (c == 's') {
+      // 开始录音
+      if (recording) {
+        Serial.println("Already recording.");
+        return;
+      }
+
+      recordingFile = LittleFS.open(recordFilePath, FILE_WRITE);
+      if (!recordingFile) {
+        Serial.println("Failed to open file for writing.");
+        return;
+      }
+
+      recording = true;
+      totalBytes = 0;
+      Serial.println("Start recording...");
+    }
+
     if (c == 'q') {
-      listening = false;
-      Serial.println("Stopped listening to mic.");
+      // 停止录音并上传
+      if (recording) {
+        recording = false;
+        recordingFile.close();
+        Serial.println("Recording stopped.");
+
+        if (WiFi.status() == WL_CONNECTED) {
+          uploadFile();
+        } else {
+          Serial.println("WiFi not connected. File not uploaded.");
+        }
+      } else {
+        Serial.println("Not currently recording.");
+      }
     }
-    if (c == 'r') {
-      listening = true;
-      Serial.println("Resumed mic.");
+  }
+
+  // 如果处于录音状态，则持续采集音频数据
+  if (recording) {
+    uint8_t buffer[512];
+    size_t bytesRead;
+    i2s_read(I2S_NUM_0, buffer, sizeof(buffer), &bytesRead, portMAX_DELAY);
+
+    recordingFile.write(buffer, bytesRead);
+    totalBytes += bytesRead;
+
+    // 防止文件太大（自动停止）
+    if (totalBytes > maxFileSize) {
+      Serial.println("Max file size reached, auto stopping.");
+      recording = false;
+      recordingFile.close();
+
+      if (WiFi.status() == WL_CONNECTED) {
+        uploadFile();
+      } else {
+        Serial.println("WiFi not connected. File not uploaded.");
+      }
     }
   }
 
-  if (!listening) {
-    delay(100);
-    return;
-  }
-
-  // Read mic data
-  uint8_t buffer[1024];
-  size_t bytesRead;
-  i2s_read(I2S_NUM_0, &buffer, sizeof(buffer), &bytesRead, portMAX_DELAY);
-
-  for (int i = 0; i < 20 && i < bytesRead; i += 2) {
-    int16_t sample = buffer[i] | (buffer[i + 1] << 8);
-    Serial.println(sample);
-  }
-
-  delay(100);
+  delay(10);
 }
