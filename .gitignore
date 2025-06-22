@@ -1,2 +1,5 @@
 ESP32-server/node_modules/*
 serviceAccountKey.json
+.env
+/speech_recognition/*.wav
+wav2vec2_checkpoints
