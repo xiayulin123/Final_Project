@@ -7,3 +7,4 @@ serviceAccountKey.json
 wav2vec2_checkpoints
 temp
 __pycache__
+/speech_recognition/speech-env/*
