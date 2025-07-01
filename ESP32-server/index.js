@@ -5,6 +5,7 @@ const multer = require('multer');
 const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const serviceAccount = require('./serviceAccountKey.json');
 
@@ -95,6 +96,21 @@ app.post(
   }
 );
 
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name in interfaces) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
 app.listen(PORT, () => {
+  const ip = getLocalIP();
   console.log(`🚀 ESP32 server running at http://localhost:${PORT}`);
+
+  console.log(`   🌐 http://${ip}:${PORT}  ← Use this IP on ESP32`);
 });
